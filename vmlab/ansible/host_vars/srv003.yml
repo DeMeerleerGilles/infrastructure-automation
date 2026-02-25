@@ -1,0 +1,36 @@
+---
+dhcp_subnets:
+  - ip: 172.16.0.0     
+    default_lease_time: 14400
+    max_lease_time: 14400
+    netmask: 255.255.0.0
+    range_begin: 172.16.0.2
+    range_end: 172.16.127.254
+    domain_name_servers: 172.16.128.1
+    routers: 172.16.128.254
+  - ip: 172.16.0.0
+    default_lease_time: 14400
+    max_lease_time: 14400
+    netmask: 255.255.0.0
+    range_begin: 172.16.192.2
+    range_end: 172.16.255.253
+    domain_name_servers: 172.16.128.1
+    routers: 172.16.255.254
+
+dhcp_hosts:
+  #Placeholders voor hosts
+  - name: ws001
+    ip: 172.16.192.10
+    mac: '08:00:27:a5:be:b0'
+  - name: ws002
+    ip: 172.16.192.11
+    mac: '08:00:27:7c:7c:75'
+  
+
+rhbase_firewall_allow_services:
+  - dhcp
+
+rhbase_firewall_allow_ports:
+  - 9100/tcp
+  - 9119/tcp
+  - 3000/tcp

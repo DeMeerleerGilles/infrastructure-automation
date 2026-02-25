@@ -1,0 +1,24 @@
+# ansible/group_vars/servers.yml
+---
+rhbase_repositories:
+  - epel-release
+rhbase_install_packages:
+  - bash-completion
+  - vim-enhanced
+  - bind-utils
+  - git
+  - nano
+  - setroubleshoot-server
+  - tree
+  - wget
+
+rhbase_users:
+  - name: gillesdm
+    comment: "Gilles De Meerleer"
+    groups: 
+      - wheel
+    shell: /bin/bash
+
+rhbase_authorized_keys:
+  - user: gillesdm
+    key: "{{ ssh_key }}"

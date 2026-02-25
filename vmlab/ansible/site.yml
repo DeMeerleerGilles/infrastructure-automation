@@ -1,0 +1,287 @@
+---
+
+# Server srv100 – Webserver + MySQL + Exporters
+- name: Configureer srv100 (webserver en database)
+  hosts: srv100
+  become: true
+  roles:
+    - bertvv.rh-base
+    - bertvv.httpd
+    - prometheus.prometheus.mysqld_exporter
+    - prometheus.prometheus.node_exporter
+
+  tasks:
+    - name: Controleren of SQL-dump reeds bestaat op de server
+      ansible.builtin.stat:
+        path: /tmp/db.sql
+      register: sql_file_exists
+
+    - name: DNS-servers configureren in resolv.conf
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 172.16.128.1
+          nameserver 172.16.128.2
+
+    - name: Controleren of de SQL-broncode gewijzigd is
+      ansible.builtin.stat:
+        path: /vagrant/ansible/files/db.sql
+      register: sql_file_updated
+
+    - name: SQL-dump kopiëren indien nodig
+      ansible.builtin.copy:
+        src: files/db.sql
+        dest: /tmp/db.sql
+      when: not sql_file_exists.stat.exists or sql_file_updated.stat.mtime > sql_file_exists.stat.mtime
+      register: sql_copy_result
+
+    - name: PHP-webapplicatie installeren
+      ansible.builtin.copy:
+        src: files/test.php
+        dest: /var/www/html/index.php
+        mode: '0644'
+
+    - name: Controleren of de database bestaat
+      community.mysql.mysql_db:
+        name: "{{ db_name }}"
+        state: present
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      register: db_exists
+
+    - name: Database aanmaken en data importeren
+      community.mysql.mysql_db:
+        name: "{{ db_name }}"
+        state: import
+        target: /tmp/db.sql
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      when: db_exists.changed
+
+    - name: Database bijwerken indien SQL-dump gewijzigd is
+      community.mysql.mysql_db:
+        name: "{{ db_name }}"
+        state: import
+        target: /tmp/db.sql
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      when: not db_exists.changed and sql_copy_result.changed
+
+    - name: Databasegebruiker aanmaken
+      community.mysql.mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        priv: "{{ db_name }}.*:ALL"
+        state: present
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - name: Self-signed SSL-certificaat kopiëren
+      ansible.builtin.copy:
+        src: files/ssl/selfsigned.crt
+        dest: /etc/pki/tls/certs/selfsigned.crt
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Apache herstarten
+
+    - name: Private SSL-sleutel kopiëren
+      ansible.builtin.copy:
+        src: files/ssl/selfsigned.key
+        dest: /etc/pki/tls/private/selfsigned.key
+        owner: root
+        group: root
+        mode: '0600'
+      notify: Apache herstarten
+
+    - name: SSL-certificaatpad instellen in Apache-configuratie
+      ansible.builtin.lineinfile:
+        path: /etc/httpd/conf.d/ssl.conf
+        regexp: '^#*SSLCertificateFile'
+        line: 'SSLCertificateFile /etc/pki/tls/certs/selfsigned.crt'
+      notify: Apache herstarten
+
+    - name: SSL-sleutelpad instellen in Apache-configuratie
+      ansible.builtin.lineinfile:
+        path: /etc/httpd/conf.d/ssl.conf
+        regexp: '^#*SSLCertificateKeyFile'
+        line: 'SSLCertificateKeyFile /etc/pki/tls/private/selfsigned.key'
+      notify: Apache herstarten
+
+  handlers:
+    - name: Apache herstarten
+      ansible.builtin.service:
+        name: httpd
+        state: restarted
+
+# Server srv001 – Hoofd DNS-server
+- name: Configureer srv001
+  hosts: srv001
+  become: true
+
+  roles:
+    - bertvv.rh-base
+    - bertvv.bind
+    - prometheus.prometheus.bind_exporter
+    - prometheus.prometheus.node_exporter
+
+  tasks:
+    - name: Oude DNS-records verwijderen uit resolv.conf
+      ansible.builtin.command: sed -i '/nameserver/d' /etc/resolv.conf
+
+    - name: Correcte DNS-servers configureren
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 172.16.128.1
+          nameserver 172.16.128.2
+
+# Server srv002 – Tweede DNS-server
+- name: Configureer srv002
+  hosts: srv002
+  become: true
+
+  roles:
+    - bertvv.rh-base
+    - bertvv.bind
+    - prometheus.prometheus.bind_exporter
+    - prometheus.prometheus.node_exporter
+
+  tasks:
+    - name: Oude DNS-records verwijderen uit resolv.conf
+      ansible.builtin.command: sed -i '/nameserver/d' /etc/resolv.conf
+
+    - name: Correcte DNS-servers configureren
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 172.16.128.1
+          nameserver 172.16.128.2
+
+
+# Server srv003 – DHCP-server
+- name: Configureer srv003 DHCP
+  hosts: srv003
+  become: true
+
+  roles:
+    - bertvv.rh-base
+    - bertvv.dhcp
+    - prometheus.prometheus.node_exporter
+
+  vars:
+    dhcp_global_classes:
+      - name: Employees
+        match: 'match if binary-to-ascii(16,8,":",substring(hardware, 4, 2)) = "ad:25"'
+
+    dhcp_global_domain_name_servers:
+      - 172.16.128.1
+      - 172.16.128.2
+
+    dhcp_subnets:
+      - ip: 172.16.0.0
+        netmask: 255.255.0.0
+        routers: 172.16.255.254
+        default_lease_time: 14400
+        max_lease_time: 15000
+        domain_name_servers:
+          - 172.16.128.1
+          - 172.16.128.2
+        pools:
+          - name: Guests
+            range_begin: 172.16.0.2
+            range_end: 172.16.127.254
+            deny: members of "Employees"
+          - name: Employees
+            range_begin: 172.16.192.1
+            range_end: 172.16.255.253
+            allow: members of "Employees"
+
+  tasks:
+    - name: DNS-servers configureren in resolv.conf
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 172.16.128.1
+          nameserver 172.16.128.2
+
+# Server srv004 – Monitoring 
+- name: Configureer srv004 monitoring
+  hosts: srv004
+  become: true
+
+  roles:
+    - bertvv.rh-base
+    - prometheus.prometheus.prometheus
+    - prometheus.prometheus.node_exporter
+    - grafana.grafana.grafana
+
+  pre_tasks:
+    - name: DNS-servers configureren in resolv.conf
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 172.16.128.1
+          nameserver 172.16.128.2
+
+  vars:
+    prometheus_scrape_configs:
+      - job_name: node_exporter
+        static_configs:
+          - targets:
+              - srv100.infra.lan:9100
+              - srv001.infra.lan:9100
+              - srv002.infra.lan:9100
+              - srv003.infra.lan:9100
+              - localhost:9100
+
+      - job_name: bind_exporter
+        static_configs:
+          - targets:
+              - srv001.infra.lan:9119
+              - srv002.infra.lan:9119
+
+      - job_name: mysqld_exporter
+        static_configs:
+          - targets:
+              - srv100.infra.lan:9104
+
+    grafana_security:
+      admin_user: admin
+      admin_password: admin
+
+    grafana_datasources:
+      - name: prometheus
+        type: prometheus
+        access: proxy
+        url: http://localhost:9090
+
+    grafana_use_provisioning: true
+    grafana_provisioning_synced: true
+    grafana_dashboards_dir: /vagrant/ansible/files/dashboards/
+
+  tasks:
+    - name: Dashboard-directory aanmaken
+      ansible.builtin.file:
+        path: /etc/grafana/provisioning/dashboards/my_dashboards
+        state: directory
+        owner: grafana
+        group: grafana
+        mode: '0755'
+
+    - name: Grafana dashboards kopiëren
+      ansible.builtin.copy:
+        src: /vagrant/ansible/files/
+        dest: /etc/grafana/provisioning/dashboards/my_dashboards/
+        owner: grafana
+        group: grafana
+        mode: '0644'
+
+    - name: Grafana provisioning configuratie kopiëren
+      ansible.builtin.copy:
+        src: /vagrant/ansible/files/dashboards.yml
+        dest: /etc/grafana/provisioning/dashboards/dashboards.yml
+        owner: grafana
+        group: grafana
+        mode: '0644'
+
+    - name: Grafana service herstarten
+      ansible.builtin.service:
+        name: grafana-server
+        state: restarted

@@ -1,0 +1,32 @@
+rhbase_install_packages:
+  - bind-utils
+
+# Server mag queries van iedereen beantwoorden
+bind_allow_query: ['any']
+bind_recursion: false
+
+# Zones
+bind_zones:
+  - name: "infra.lan"
+    type: secondary
+    primaries:
+      - 172.16.128.1
+    allow_transfer: []
+    name_servers:
+      - ns1.infra.lan.
+      - ns2.infra.lan.
+    networks:
+      - '172.16.128'
+
+bind_listen_ipv4:
+  - 172.16.128.2
+
+rhbase_firewall_services:
+  - name: "named"
+    state: enabled
+    permanent: true
+    
+rhbase_firewall_allow_ports:
+  - 9100/tcp
+  - 53/udp
+  - 9119/tcp

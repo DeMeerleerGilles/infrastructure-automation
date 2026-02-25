@@ -1,0 +1,62 @@
+---
+- name: Configure VyOS Router
+  hosts: r001
+  gather_facts: false
+
+  tasks:
+    - name: Configure LAN interface IP address
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces ethernet eth1 address '172.16.255.254/16'
+
+    - name: Set router hostname
+      vyos.vyos.vyos_config:
+        lines:
+          - set system host-name 'R1'
+        save: true
+
+    - name: Set interface descriptions (LAN/WAN)
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces ethernet eth1 description 'LAN'
+          - set interfaces ethernet eth0 description 'WAN'
+
+    - name: Configure WAN interface to use DHCP
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces ethernet eth0 address dhcp
+        save: true
+
+    - name: Configure default static route to the internet
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols static route 0.0.0.0/0 next-hop '10.0.2.2'
+
+    - name: Configure source NAT for LAN to WAN
+      vyos.vyos.vyos_config:
+        lines:
+          - set nat source rule 100 outbound-interface name 'eth0'
+          - set nat source rule 100 source address '172.16.0.0/16'
+          - set nat source rule 100 translation address masquerade
+
+    - name: Configure destination NAT for HTTP (port 80)
+      vyos.vyos.vyos_config:
+        lines:
+          - set nat destination rule 100 inbound-interface name 'eth0'
+          - set nat destination rule 100 protocol tcp
+          - set nat destination rule 100 destination port '80'
+          - set nat destination rule 100 translation address '172.16.128.100'
+          - set nat destination rule 100 translation port '80'
+
+    - name: Configure destination NAT for HTTPS
+      vyos.vyos.vyos_config:
+        lines:
+          - set nat destination rule 101 inbound-interface name 'eth0'
+          - set nat destination rule 101 protocol tcp
+          - set nat destination rule 101 destination port '443'
+          - set nat destination rule 101 translation address '172.16.128.100'
+          - set nat destination rule 101 translation port '443'
+
+    - name: Save configuration to persist after reboot
+      vyos.vyos.vyos_config:
+        save: true

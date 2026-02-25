@@ -1,0 +1,54 @@
+
+# rh-base packages
+rhbase_install_packages:
+  - bind-utils
+  
+# BIND algemene opties
+bind_allow_query: ['any']   
+bind_recursion: true          
+bind_forward_only: true
+bind_listen_ipv4: ['any']
+bind_listen_on_v6: ['::']
+
+bind_forwarders:
+  - 8.8.8.8
+  - 1.1.1.1
+
+# DNSSEC uitschakelen
+bind_dnssec_enable: false
+bind_dnssec_validation: false
+
+# Zone definitie
+bind_zones:
+  - name: "infra.lan"
+    type: primary               
+    allow_transfer:
+      - 172.16.128.2           
+    primaries:
+      - 172.16.128.1
+    name_servers:
+      - ns1.infra.lan.
+      - ns2.infra.lan.
+    hosts:
+      - name: ns1
+        ip: 172.16.128.1
+      - name: ns2
+        ip: 172.16.128.2
+      - name: srv003
+        ip: 172.16.128.3    
+      - name: srv100
+        ip: 172.16.128.100
+        aliases:
+          - www
+      - name: srv004
+        ip: 172.16.128.4
+      - name: r001
+        ip: 172.16.128.254
+        aliases:
+          - gw
+    networks:
+      - '172.16.128'
+      
+rhbase_firewall_allow_ports:
+  - 9100/tcp
+  - 9119/tcp

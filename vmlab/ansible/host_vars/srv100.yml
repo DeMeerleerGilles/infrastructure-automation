@@ -1,0 +1,44 @@
+# srv100.yml
+---
+rhbase_install_packages:
+  - mariadb-server
+  - mariadb
+  - httpd
+  - mod_ssl
+  - php
+  - php-mysqlnd
+  - python3-mysqlclient
+  - php-cli
+  - php-common
+  - php-json
+  - php-curl
+  - php-gd
+  - php-xml
+  - php-zip
+  - php-mbstring
+  - php-opcache
+  - certbot
+  - python3-certbot-apache
+
+
+rhbase_selinux_booleans:
+  - httpd_can_network_connect_db
+
+
+rhbase_start_services:
+- httpd
+- mariadb
+
+rhbase_firewall_allow_services:
+  - http
+  - https
+
+db_name: appdb
+db_user: appuser
+db_password: "let me in"
+
+rhbase_firewall_allow_ports:
+  - 9100/tcp
+  - 9104/tcp     
+  - 9119/tcp
+  - 9117/tcp

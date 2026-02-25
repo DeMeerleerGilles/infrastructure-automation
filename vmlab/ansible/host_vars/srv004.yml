@@ -1,0 +1,14 @@
+---
+rhbase_firewall_allow_ports:
+  - 3000/tcp
+  - 9119/tcp
+  - 9100/tcp
+  - 9104/tcp
+  
+rhbase_firewall_allow_services:
+  - prometheus
+  - http
+  - https  
+
+grafana_security_admin_user: admin
+grafana_security_admin_password: admin
